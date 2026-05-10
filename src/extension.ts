@@ -2,23 +2,23 @@ import * as vscode from "vscode";
 import open from "open";
 import path from "path";
 
-/**
- * @param {vscode.ExtensionContext} context
- */
-export function activate(context) {
+interface PathMapping {
+  remotePrefix: string;
+  networkPath: string;
+  prefixToStrip?: string;
+}
+
+export function activate(context: vscode.ExtensionContext) {
   console.log('Remote-SSH reveal Explorer extension is now active!');
   console.log('Extension context:', context.extensionPath);
 
   let disposable = vscode.commands.registerCommand('remote-ssh-reveal-explorer.revealInExplorer', async function (arg) {
-
-    let remotePath = undefined;
+    let remotePath: string | undefined;
 
     if (arg instanceof vscode.Uri) {
-      // Triggered by right-click on a file in Explorer
-     console.log(`Right-clicked file: ${arg.fsPath}`);
+      console.log(`Right-clicked file: ${arg.fsPath}`);
       remotePath = arg.fsPath;
     } else {
-      // Likely triggered by a shortcut, button, or manually
       const editor = vscode.window.activeTextEditor;
       if (editor) {
         const doc = editor.document;
@@ -26,12 +26,17 @@ export function activate(context) {
         remotePath = doc.uri.fsPath;
       } else {
         console.log('No editor is active');
-        remotePath = undefined
+        remotePath = undefined;
       }
     }
 
-    console.log('Reveal in Explorer command executed with path:', remotePath);
+    if (!remotePath) {
+      console.log('No remote path specified');
+      vscode.window.showErrorMessage('No file or folder selected');
+      return;
+    }
 
+    console.log('Reveal in Explorer command executed with path:', remotePath);
     console.log('File path:', remotePath);
 
     const dirPath = path.dirname(remotePath);
@@ -42,11 +47,11 @@ export function activate(context) {
 
     try {
       await open(localPath);
-
       vscode.window.showInformationMessage(`Opened folder: ${localPath}`);
     } catch (error) {
       console.error('Error opening explorer:', error);
-      vscode.window.showErrorMessage(`Failed to open folder: ${localPath}. Error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Failed to open folder: ${localPath}. Error: ${errorMessage}`);
     }
   });
 
@@ -60,26 +65,43 @@ export function activate(context) {
   console.log('Commands registered successfully');
 }
 
-function networkPath(remotePath) {
-  // Determine the correct path separator based on the platform
-  const { platform } = process;
-  console.log('Platform:', platform);
-  const locale = path[platform === 'win32' ? 'win32' : 'posix'];
+function networkPath(remotePath: string): string {
+  const config = vscode.workspace.getConfiguration("remote-ssh-reveal-explorer");
+  const pathMappings = config.get<PathMapping[]>("pathMappings", []);
 
-  // Replace prefix path separators with local ones
-  const prefixToStrip = vscode.workspace.getConfiguration("remote-ssh-reveal-explorer").get<string>("pathPrefixToStrip");
-  const prefixToStripLocal = prefixToStrip.replace(/[\\/]/g, locale.sep);
+  console.log('Path mappings:', JSON.stringify(pathMappings));
+  console.log('Remote path:', remotePath);
 
-  // Remove prefixToStripLocal if present
-  let remotepathWithoutPrefix = remotePath;
-  if (remotePath.startsWith(prefixToStripLocal)) {
-    remotepathWithoutPrefix = remotePath.slice(prefixToStripLocal.length);
+  for (const mapping of pathMappings) {
+    console.log('Checking mapping:', mapping.remotePrefix, '->', mapping.networkPath);
+    
+    if (remotePath.startsWith(mapping.remotePrefix)) {
+      let strippedPath = remotePath.slice(mapping.remotePrefix.length);
+      console.log('Stripped path after remotePrefix:', strippedPath);
+
+      if (mapping.prefixToStrip && strippedPath.startsWith(mapping.prefixToStrip)) {
+        strippedPath = strippedPath.slice(mapping.prefixToStrip.length);
+        console.log('Stripped path after prefixToStrip:', strippedPath);
+      }
+
+      const result = `${mapping.networkPath}${strippedPath}`;
+      console.log('Mapped result:', result);
+      return result;
+    }
   }
 
-  // Compose UNC path
-  const networkPath = vscode.workspace.getConfiguration("remote-ssh-reveal-explorer").get<string>("networkPath");
+  console.log('No mapping matched, using fallback configuration');
+  const prefixToStrip = config.get<string>("pathPrefixToStrip", "");
+  
+  let remotepathWithoutPrefix = remotePath;
+  if (prefixToStrip && remotePath.startsWith(prefixToStrip)) {
+    remotepathWithoutPrefix = remotePath.slice(prefixToStrip.length);
+  }
 
-  return `${networkPath}${remotepathWithoutPrefix}`;
+  const networkPathConfig = config.get<string>("networkPath", "");
+  const result = `${networkPathConfig}${remotepathWithoutPrefix}`;
+  console.log('Fallback result:', result);
+  return result;
 }
 
 export function deactivate() { }
