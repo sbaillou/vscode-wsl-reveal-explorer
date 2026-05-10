@@ -72,16 +72,33 @@ function networkPath(remotePath: string): string {
   console.log('Path mappings:', JSON.stringify(pathMappings));
   console.log('Remote path:', remotePath);
 
+  const isWindowsRemote = isWindowsPath(remotePath);
+  console.log('Is Windows remote:', isWindowsRemote);
+
   for (const mapping of pathMappings) {
     console.log('Checking mapping:', mapping.remotePrefix, '->', mapping.networkPath);
     
-    if (remotePath.startsWith(mapping.remotePrefix)) {
-      let strippedPath = remotePath.slice(mapping.remotePrefix.length);
+    const matches = isWindowsRemote 
+      ? remotePath.toLowerCase().startsWith(mapping.remotePrefix.toLowerCase())
+      : remotePath.startsWith(mapping.remotePrefix);
+    
+    if (matches) {
+      const actualPrefixLength = isWindowsRemote 
+        ? mapping.remotePrefix.length
+        : mapping.remotePrefix.length;
+      
+      let strippedPath = remotePath.slice(actualPrefixLength);
       console.log('Stripped path after remotePrefix:', strippedPath);
 
-      if (mapping.prefixToStrip && strippedPath.startsWith(mapping.prefixToStrip)) {
-        strippedPath = strippedPath.slice(mapping.prefixToStrip.length);
-        console.log('Stripped path after prefixToStrip:', strippedPath);
+      if (mapping.prefixToStrip) {
+        const prefixMatches = isWindowsRemote
+          ? strippedPath.toLowerCase().startsWith(mapping.prefixToStrip.toLowerCase())
+          : strippedPath.startsWith(mapping.prefixToStrip);
+        
+        if (prefixMatches) {
+          strippedPath = strippedPath.slice(mapping.prefixToStrip.length);
+          console.log('Stripped path after prefixToStrip:', strippedPath);
+        }
       }
 
       const result = `${mapping.networkPath}${strippedPath}`;
@@ -94,14 +111,25 @@ function networkPath(remotePath: string): string {
   const prefixToStrip = config.get<string>("pathPrefixToStrip", "");
   
   let remotepathWithoutPrefix = remotePath;
-  if (prefixToStrip && remotePath.startsWith(prefixToStrip)) {
-    remotepathWithoutPrefix = remotePath.slice(prefixToStrip.length);
+  if (prefixToStrip) {
+    const matches = isWindowsRemote
+      ? remotePath.toLowerCase().startsWith(prefixToStrip.toLowerCase())
+      : remotePath.startsWith(prefixToStrip);
+    
+    if (matches) {
+      remotepathWithoutPrefix = remotePath.slice(prefixToStrip.length);
+    }
   }
 
   const networkPathConfig = config.get<string>("networkPath", "");
   const result = `${networkPathConfig}${remotepathWithoutPrefix}`;
   console.log('Fallback result:', result);
   return result;
+}
+
+function isWindowsPath(filePath: string): boolean {
+  const windowsPathRegex = /^[A-Za-z]:[\\/]/;
+  return windowsPathRegex.test(filePath);
 }
 
 export function deactivate() { }
