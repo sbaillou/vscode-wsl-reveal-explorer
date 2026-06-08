@@ -74,13 +74,41 @@
         "remote-ssh-reveal-explorer.networkPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the network folder of the Remote-SSH machine.",
+          "description": "Default network path for the Remote-SSH machine (fallback when no mapping matches).",
           "scope": "window"
         },
         "remote-ssh-reveal-explorer.pathPrefixToStrip": {
           "type": "string",
           "default": "",
-          "description": "Prefix to strip from the remote path.",
+          "description": "Default prefix to strip from remote path (fallback when no mapping matches).",
+          "scope": "window"
+        },
+        "remote-ssh-reveal-explorer.pathMappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "remotePrefix": {
+                "type": "string",
+                "description": "Remote path prefix to match (e.g., /home/user/projects)"
+              },
+              "networkPath": {
+                "type": "string",
+                "description": "Corresponding network path (e.g., \\\\server\\share\\projects)"
+              },
+              "prefixToStrip": {
+                "type": "string",
+                "default": "",
+                "description": "Optional prefix to strip from the matched remote path"
+              }
+            },
+            "required": [
+              "remotePrefix",
+              "networkPath"
+            ]
+          },
+          "default": [],
+          "description": "Array of path mappings. Matches are evaluated in order, first match wins. Falls back to networkPath if no match found.",
           "scope": "window"
         }
       }
@@ -101,7 +129,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
-    "@types/vscode": "^1.74.0"
+    "@types/vscode": "^1.74.0",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "open": "^10.2.0",
